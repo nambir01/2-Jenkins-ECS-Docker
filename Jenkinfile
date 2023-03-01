@@ -1,0 +1,43 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_IMAGE_NAME = 'my-flask-app'
+        AWS_REGION = 'us-east-1'
+        AWS_ACCOUNT_ID = '347056965617'
+        AWS_ECR_REPOSITORY = 'my-ecr-repo'
+    }
+    
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main',
+                    credentialsId: 'my-github-credentials',
+                    url: 'https://github.com/my-username/my-flask-app.git'
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $DOCKER_IMAGE_NAME .'
+            }
+        }
+        
+        stage('Push Docker Image to ECR') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        credentialsId: 'my-aws-credentials',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]
+                ]) {
+                    sh "aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+                    sh "docker tag $DOCKER_IMAGE_NAME:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$AWS_ECR_REPOSITORY:$DOCKER_IMAGE_NAME"
+                    sh "docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$AWS_ECR_REPOSITORY:$DOCKER_IMAGE_NAME"
+                }
+            }
+        }
+    }
+}
